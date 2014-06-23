@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<modification>
+	<id>bitfork-rate.com</id>
+	<version>1.5.x</version>
+	<vqmver required="true">2.4.0</vqmver>
+	<author>bitfork-rate.com</author>
+
+    <file name="admin/model/localisation/currency.php">
+        <operation error="log">
+            <search position="before" index="1"><![CDATA[public function getTotalCurrencies() {]]></search>
+            <add><![CDATA[
+    public function updateCurrencyBtc($usd_value)
+	{
+		$curl = curl_init();
+
+		curl_setopt($curl, CURLOPT_URL, 'http://bitfork-rate.com/api/BTC/USD/0');
+		curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
+
+		$content = curl_exec($curl);
+
+		curl_close($curl);
+
+		$rate = json_decode($content, true);
+		$rate = (isset($rate['data'], $rate['data']['index'])) ? ($usd_value / (float)$rate['data']['index']) : false;
+
+		if ($rate) {
+			$this->db->query("UPDATE " . DB_PREFIX . "currency SET value = '" . $rate . "', date_modified = '" .  $this->db->escape(date('Y-m-d H:i:s')) . "' WHERE code = 'BTC'");
+		}
+
+		return false;
+	}
+            ]]></add>
+        </operation>
+        <operation error="log">
+            <search position="replace" index="1"><![CDATA[$data[] = $this->config->get('config_currency') . $result['code'] . '=X';]]></search>
+            <add><![CDATA[
+                if (mb_strtolower($result['code'],'utf-8')=='btc')
+                    $btc = true;
+                else
+                    $data[] = $this->config->get('config_currency') . $result['code'] . '=X';
+            ]]></add>
+        </operation>
+        <operation error="log">
+            <search position="before" index="1"><![CDATA[if ((float)$value) {]]></search>
+            <add><![CDATA[
+                if (mb_strtolower($currency,'utf-8') == 'usd') {
+                    $usd_value = (float)$value;
+                }
+            ]]></add>
+        </operation>
+        <operation error="log">
+            <search position="before" index="1"><![CDATA[$this->db->query("UPDATE " . DB_PREFIX . "currency SET value = '1.00000', date_modified = '" .  $this->db->escape(date('Y-m-d H:i:s')) . "' WHERE code = '" . $this->db->escape($this->config->get('config_currency')) . "'");]]></search>
+            <add><![CDATA[
+			if (isset($btc)) {
+				if (!isset($usd_value) and mb_strtolower($this->config->get('config_currency'),'utf-8') == 'usd') {
+					$usd_value = 1;
+				}
+				if (isset($usd_value))
+					$this->updateCurrencyBtc($usd_value);
+			}
+            ]]></add>
+        </operation>
+    </file>
+
+</modification>
